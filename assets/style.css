@@ -12,3 +12,4 @@ label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}input,selec
 @media(min-width:700px){.site-header{height:88px}.main-content{padding-top:42px}.navigation{justify-content:center}.navigation .account{margin-left:24px}.site-footer{margin-top:20px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 .field{min-width:0}input,select{min-width:0;font-size:16px}.filters input,.filters select{font-size:16px}.filter-grid .field:has(input[type="date"]){grid-column:1/-1}.navigation .account{overflow-wrap:anywhere}
+.photo-button{cursor:pointer;margin:0 0 8px}#decode-status{margin:12px 0;font-size:12px}.camera{height:270px}.camera-caption{font-size:10px}.scan-target{height:110px}

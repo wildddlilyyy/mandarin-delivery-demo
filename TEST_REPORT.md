@@ -24,6 +24,16 @@
 
 ## 線上部署
 
+## iPhone 掃描修正（2026-10-13）
+
+- 改為映射畫面橘框到原始影像後裁切解碼，定期保留全畫面回退；開啟 ZXing TRY_HARDER。
+- 提高相機解析度要求，裝置有支援時套用連續對焦；取得權限後提供可用鏡頭切換。
+- 補上正在辨識與六秒未讀到的提示；支援本機照片辨識，不上傳照片。
+- 資料服務與掃描區座標／相機停止競態共 9 項測試通過。
+- 本機產生的 Code 128 測試圖，照片辨識讀出 `20261012192853973`；尚未驗收使用者 iPhone 的實體出貨單掃描。
+
+### 發布資訊
+
 - GitHub：<https://github.com/wildddlilyyy/mandarin-delivery-demo>
 - GitHub Pages：<https://wildddlilyyy.github.io/mandarin-delivery-demo/>
 - 已確認 main／根目錄部署成功，HTTPS 開啟，子目錄資源與 hash 路由正常。
