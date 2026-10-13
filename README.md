@@ -4,6 +4,8 @@
 
 ## 開啟方式
 
+[開啟線上 Demo](https://wildddlilyyy.github.io/mandarin-delivery-demo/) · [GitHub 專案](https://github.com/wildddlilyyy/mandarin-delivery-demo)
+
 靜態檔案可直接部署 GitHub Pages，來源選 `main` 分支的根目錄。支援 repository 子目錄及 hash 路由。相機必須由 HTTPS 網頁或 localhost 開啟；不支援直接雙擊 file 網址使用。
 
 本機預覽需 Node.js 18+，執行 `npm start`，開啟 `http://127.0.0.1:8173`。測試執行 `npm test`。沒有前端建置步驟或 npm 安裝需求，ZXing 套件已隨網站附上。
@@ -37,5 +39,5 @@
 
 [正式產品規格](SPEC.md) · [Demo 開發規格](DEMO_SPEC.md) · [驗證紀錄](TEST_REPORT.md)
 
-條碼引擎：`@zxing/browser` 0.1.5 UMD（內含 ZXing JS），來源為官方 npm 套件的 jsDelivr 發佈；MIT 授權見 `assets/vendor/ZXING-LICENSE.txt`。字體使用 Google Fonts 的 Noto Sans TC，網路不可用時回退至系統繁中字體。
+條碼引擎：`@zxing/browser` 0.1.5 UMD（內含 ZXing JS），來源為官方 npm 套件的 jsDelivr 發佈；browser 的 MIT 授權見 `assets/vendor/ZXING-LICENSE.txt`，內含 library 的 Apache-2.0 授權見 `assets/vendor/ZXING-LIBRARY-LICENSE.txt`。字體使用 Google Fonts 的 Noto Sans TC，網路不可用時回退至系統繁中字體。
 
