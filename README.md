@@ -14,6 +14,7 @@
 
 1. 用 `driver01` 或 `manager01` 登入，密碼都是 `demo1234`。
 2. 選「開始掃描」，允許相機並對準出貨單右上方條碼。也可手動輸入或點擊「成功範例／失敗範例」。
+   **新增：預設為「數字辨識」**。直接對準訂單編號的 17 碼數字，讓數字填滿細框；連續三次讀到相同號碼，並查到展示訂單後會自動加入。不必按拍照。第一次會載入 OCR 模型，請保持網頁開啟；仍需核對後才送出狀態更新。
    讀不到時可切換鏡頭，或點「拍照／選照片辨識」，近拍條碼並保留左右白邊。建議掃紙本，避開螢幕條紋與反光。
 3. 開啟訂單清單，核對、勾選已實際送達，再確認送出。
 4. 查看逐筆結果、歷史與操作紀錄；到操作紀錄頁可重設資料重新展示。
@@ -41,4 +42,6 @@
 [正式產品規格](SPEC.md) · [Demo 開發規格](DEMO_SPEC.md) · [驗證紀錄](TEST_REPORT.md)
 
 條碼引擎：`@zxing/browser` 0.1.5 UMD（內含 ZXing JS），來源為官方 npm 套件的 jsDelivr 發佈；browser 的 MIT 授權見 `assets/vendor/ZXING-LICENSE.txt`，內含 library 的 Apache-2.0 授權見 `assets/vendor/ZXING-LIBRARY-LICENSE.txt`。字體使用 Google Fonts 的 Noto Sans TC，網路不可用時回退至系統繁中字體。
+
+數字辨識：Tesseract.js 6.0.1、tesseract.js-core 6.0.0、@tesseract.js-data/eng 1.0.0 的 best_int 模型；程式、worker、WASM 與語言資料均在 assets/vendor/ocr 內提供，採 Apache-2.0 授權，見該目錄及 lang 子目錄 LICENSE。只下載模型，不上傳鏡頭內容。
 

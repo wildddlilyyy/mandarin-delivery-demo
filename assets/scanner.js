@@ -1,3 +1,4 @@
+import {RealtimeDigits} from './ocr.js?v=3';
 export function scanRegion(vw,vh,dw,dh,target) {
   const scale=Math.max(dw/vw,dh/vh),ox=(vw*scale-dw)/2,oy=(vh*scale-dh)/2;
   const x=Math.max(0,(target.x+ox)/scale),y=Math.max(0,(target.y+oy)/scale);
@@ -28,11 +29,12 @@ export async function decodePhoto(file) {
 }
 export class CameraScanner {
   constructor(onResult, onError, onEvent, onStatus=()=>{}) { this.onResult=onResult;this.onError=onError;this.onEvent=onEvent;this.onStatus=onStatus;this.active=false;this.pending=false;this.generation=0;this.lastText='';this.lastSeen=0;this.stream=null; }
-  async start(video,deviceId='') {
+  async start(video,deviceId='',mode='barcode') {
     if(this.active||this.pending)return;const generation=++this.generation;this.pending=true;this.lastText='';this.lastSeen=0;
     try {
       if(!globalThis.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw new Error('相機需要 HTTPS 網址與支援相機的瀏覽器。你仍可手動輸入。');
-      const reader=createReader();
+      this.mode=mode;
+      const reader=mode==='numbers'?null:createReader();
       const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(deviceId?{deviceId:{exact:deviceId}}:{facingMode:{ideal:'environment'}}),width:{ideal:1920},height:{ideal:1080}}});
       if(generation!==this.generation){stream.getTracks().forEach(t=>t.stop());return;}
       this.stream=stream;this.video=video;video.muted=true;video.setAttribute('playsinline','');video.srcObject=stream;await video.play();
@@ -43,28 +45,44 @@ export class CameraScanner {
       this.active=true;this.onEvent('camera_start');
       if(generation!==this.generation)return;
       navigator.mediaDevices.enumerateDevices().then(devices=>{if(generation===this.generation)this.onStatus({cameras:devices.filter(d=>d.kind==='videoinput'),selected:track.getSettings().deviceId});}).catch(()=>{});
+      if(mode==='numbers'){
+        const digits=new RealtimeDigits(status=>{if(generation===this.generation)this.onStatus(status);});this.digits=digits;
+        await digits.init();
+        if(generation!==this.generation){digits.close();return;}
+      }
       const started=Date.now();let attempts=0;
-      const tick=()=>{
+      const tick=async()=>{
         if(generation!==this.generation)return;
         if(video.readyState>=2&&video.videoWidth){
           const bounds=video.getBoundingClientRect(),target=video.parentElement.querySelector('.scan-target').getBoundingClientRect();
           const r=scanRegion(video.videoWidth,video.videoHeight,bounds.width,bounds.height,{x:target.left-bounds.left,y:target.top-bounds.top,width:target.width,height:target.height});
           attempts++;
           try{
+            if(mode==='numbers'){
+              const result=await this.digits.read(video,r);
+              if(generation!==this.generation)return;
+              if(result?.ready){this.onResult(result.number);this.onStatus({message:'已穩定讀到 '+result.number+'，可繼續對準下一張。'});}
+              else if(result?.number&&result.hits>=3){this.onStatus({message:'已確認 '+result.number+'，請對準下一張。'});}
+              else if(result?.number&&result.hits){this.onStatus({message:'讀到 '+result.number+' · 確認中 '+result.hits+'/3，請保持穩定。'});}
+              else this.onStatus({message:'請只對準 17 碼數字，讓數字填滿框寬並保持清晰。'});
+            }else{
             const actual=attempts%4===0?{x:0,y:0,width:video.videoWidth,height:video.videoHeight}:r;
             const text=reader.decodeFromCanvas(capture(video,actual)).getText(),now=Date.now();
             if(text!==this.lastText||now-this.lastSeen>1800){this.lastText=text;this.onResult(text);}this.lastSeen=now;this.onStatus({message:'已讀到條碼，可繼續掃描下一張。'});
+            }
           }catch(e){
+            if(generation!==this.generation)return;
+            if(mode==='numbers'){this.stop(false);this.onEvent('camera_failed',{result:'failed',message:e.message});this.onError('數字辨識中斷，請停止後重試；若持續失敗可手動輸入。');return;}
             if(e instanceof TypeError||e.name==='SecurityError'){this.stop(false);this.onEvent('camera_failed',{result:'failed',message:e.message});this.onError('辨識中斷，請重開相機或改用照片辨識。');return;}
             if(!this.lastSeen||Date.now()-this.lastSeen>2500)this.onStatus({message:Date.now()-started>6000?'尚未讀到條碼。請讓條碼接近框寬、避免反光；也可改用拍照辨識。':'正在辨識框內條碼，請保持穩定。'});
           }
         }else this.onStatus({message:'等待相機畫面，請保持此頁開啟。'});
-        if(generation===this.generation)this.timer=setTimeout(tick,250);
+        if(generation===this.generation)this.timer=setTimeout(tick,mode==='numbers'?450:250);
       };this.timer=setTimeout(tick,100);
     }catch(e){if(generation!==this.generation)return;this.stop(false);const messages={NotAllowedError:'未取得相機權限。請在瀏覽器設定允許相機，或使用手動輸入。',NotFoundError:'找不到相機，請使用手動輸入。',NotReadableError:'相機被其他程式使用，請關閉其他相機程式。',OverconstrainedError:'相機不支援此設定，請使用手動輸入。'};this.onEvent('camera_failed',{result:'failed',message:messages[e.name]||e.message});this.onError(messages[e.name]||e.message||'無法啟動相機，請使用手動輸入。');}
     finally{if(generation===this.generation)this.pending=false;}
   }
   stop(record=true) {
-    const running=this.active||this.pending;this.generation++;clearTimeout(this.timer);this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;if(this.video){this.video.pause();this.video.srcObject=null;this.video=null;}this.active=false;this.pending=false;if(running&&record)this.onEvent('camera_stop');
+    const running=this.active||this.pending;this.generation++;clearTimeout(this.timer);this.digits?.close();this.digits=null;this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;if(this.video){this.video.pause();this.video.srcObject=null;this.video=null;}this.active=false;this.pending=false;if(running&&record){this.onEvent('camera_stop');this.onStatus({message:'已停止辨識，點擊開始掃描可繼續。'});}
   }
 }
