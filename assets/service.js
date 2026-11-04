@@ -14,9 +14,9 @@ const clone = x => JSON.parse(JSON.stringify(x));
 const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export class StorageError extends Error {}
 export function validateState(s) {
-  if (!s || s.version !== 1 || !Array.isArray(s.orders) || s.orders.length !== 4 || !Array.isArray(s.events) || !Array.isArray(s.batches) || !s.queues) throw new StorageError('展示資料格式異常，請確認後重設。');
-  const orderSet = new Set(seedRows.map(x => x[0]));
-  if (new Set(s.orders.map(o => o.number)).size !== 4 || s.orders.some(o => !o || !orderSet.has(o.number) || typeof o.recipient !== 'string' || typeof o.area !== 'string' || !['未送達', '已送達'].includes(o.status))) throw new StorageError('訂單資料格式異常，請確認後重設。');
+  if (!s || s.version !== 1 || !Array.isArray(s.orders) || !Array.isArray(s.events) || !Array.isArray(s.batches) || !s.queues) throw new StorageError('展示資料格式異常，請確認後重設。');
+  const orderSet = new Set(s.orders.map(o => o?.number));
+  if (orderSet.size !== s.orders.length || s.orders.some(o => !o || typeof o.number !== 'string' || !/^\d{17}$/.test(o.number) || typeof o.recipient !== 'string' || typeof o.area !== 'string' || !['未送達', '已送達'].includes(o.status))) throw new StorageError('訂單資料格式異常，請確認後重設。');
   for (const a of ACCOUNTS) if (!Array.isArray(s.queues[a]) || s.queues[a].some(n => typeof n !== 'string' || !orderSet.has(n)) || new Set(s.queues[a]).size !== s.queues[a].length) throw new StorageError('待送出清單格式異常，請確認後重設。');
   if (s.events.some(e => !e || typeof e.id !== 'string' || typeof e.account !== 'string' || typeof e.action !== 'string' || typeof e.result !== 'string' || !Number.isFinite(Date.parse(e.time)))) throw new StorageError('操作紀錄格式異常，請確認後重設。');
   if (s.batches.some(b => !b || typeof b.id !== 'string' || !ACCOUNTS.includes(b.account) || !Number.isFinite(Date.parse(b.time)) || !['running','complete','interrupted'].includes(b.state) || !Array.isArray(b.numbers) || b.numbers.some(n => !orderSet.has(n)) || !Array.isArray(b.results) || b.results.some(r => !r || !orderSet.has(r.number) || !['success','failed','skipped','interrupted'].includes(r.result)))) throw new StorageError('批次資料格式異常，請確認後重設。');
@@ -57,14 +57,25 @@ export class DemoService {
   add(input, source = 'manual_input') {
     const account = this.requireUser(); if (this.busy) throw new Error('正在處理批次。');
     const number = String(input).trim(); if (!number) throw new Error('請輸入訂單編號。');
+    if (!/^\d{17}$/.test(number)) {
+      const message = '請確認訂單編號為 17 碼數字。';
+      this.appendEvent(source, { number: number.slice(0,200), result: 'invalid', message });
+      return { result: 'invalid', message, order: null };
+    }
     const o = this.lookupOrder(number); const q = this.state.queues[account];
     let result = 'added', message = '已加入訂單';
-    if (!o) { result = 'unknown'; message = '查無此訂單，請確認編號或使用展示訂單。'; }
-    else if (o.status === '已送達') { result = 'delivered'; message = '此訂單已送達，無需再次登記。'; }
+    if (o?.status === '已送達') { result = 'delivered'; message = '此訂單已送達，無需再次登記。'; }
     else if (q.includes(number)) { result = 'duplicate'; message = '此訂單已在清單中，已略過重複。'; }
     else if (q.length >= 500) { result = 'limit'; message = '單批最多 500 筆，請先送出目前清單。'; }
-    this.commit(s => { this.event(s, source, { number: number.slice(0,200), result, message }); if (result === 'added') s.queues[account].push(number); });
-    return { result, message, order: o };
+    if (result === 'added' && !o) message = '已建立展示訂單並加入清單，未查詢 SHOPLINE。';
+    this.commit(s => {
+      if (result === 'added') {
+        if (!o) s.orders.push({ number, recipient: '展示訂單', area: '未載入真實收件資料', status: '未送達' });
+        s.queues[account].push(number);
+      }
+      this.event(s, source, { number, result, message });
+    });
+    return { result, message, order: this.lookupOrder(number) };
   }
   remove(number) { const a = this.requireUser(); if (this.busy) throw new Error('正在處理批次。'); this.commit(s => { s.queues[a] = s.queues[a].filter(n => n !== number); this.event(s, 'remove_order', { number }); }); }
   recover() {
