@@ -1,4 +1,5 @@
 import {RealtimeDigits} from './ocr.js?v=3';
+import {loadEngine,decodeCanvas} from './barcode.js?v=4';
 export function scanRegion(vw,vh,dw,dh,target) {
   const scale=Math.max(dw/vw,dh/vh),ox=(vw*scale-dw)/2,oy=(vh*scale-dh)/2;
   const x=Math.max(0,(target.x+ox)/scale),y=Math.max(0,(target.y+oy)/scale);
@@ -9,10 +10,10 @@ export function createReader() {
   // TRY_HARDER = 3 in the pinned ZXing DecodeHintType enum.
   return new ZXingBrowser.BrowserMultiFormatReader(new Map([[3,true]]));
 }
-function capture(source,r,rotate=false) {
-  const c=document.createElement('canvas'),scale=Math.min(2,1800/r.width),w=Math.max(1,Math.round(r.width*scale)),h=Math.max(1,Math.round(r.height*scale));
+function capture(source,r,rotate=false,limit=1800) {
+  const c=document.createElement('canvas'),scale=Math.min(2,limit/r.width),w=Math.max(1,Math.round(r.width*scale)),h=Math.max(1,Math.round(r.height*scale));
   c.width=(rotate?h:w)+48;c.height=(rotate?w:h)+48;
-  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.imageSmoothingEnabled=false;ctx.translate(24,24);
+  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.translate(24,24);
   if(rotate){ctx.translate(h,0);ctx.rotate(Math.PI/2);}ctx.drawImage(source,r.x,r.y,r.width,r.height,0,0,w,h);return c;
 }
 export async function decodePhoto(file) {
@@ -21,21 +22,22 @@ export async function decodePhoto(file) {
   const url=URL.createObjectURL(file),img=new Image();
   try {
     await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('無法開啟此照片，請改用 JPG／PNG。'));img.src=url;});
-    const engine=createReader(),w=img.naturalWidth,h=img.naturalHeight,regions=[{x:0,y:0,width:w,height:h}];
+    const wasm=await loadEngine().catch(()=>null);let engine=null;try{engine=createReader();}catch(e){if(!wasm)throw e;}
+    const w=img.naturalWidth,h=img.naturalHeight,regions=[{x:0,y:0,width:w,height:h}];
     for(let i=0;i<5;i++)regions.push({x:0,y:h*i*.16,width:w,height:Math.min(h*.36,h-h*i*.16)});
-    for(const region of regions){for(const rotate of [false,true]){try{return engine.decodeFromCanvas(capture(img,region,rotate)).getText();}catch{}}await new Promise(r=>setTimeout(r,0));}
+    for(const region of regions){for(const rotate of [false,true]){const canvas=capture(img,region,rotate,3200);if(wasm){try{const text=await decodeCanvas(canvas);if(text)return text;}catch{}}if(engine){try{return engine.decodeFromCanvas(canvas).getText();}catch{}}}await new Promise(r=>setTimeout(r,0));}
     throw new Error('尚未讀到條碼。請只拍條碼、保留左右白邊，避免反光；也可手動輸入。');
   }finally{URL.revokeObjectURL(url);}
 }
 export class CameraScanner {
   constructor(onResult, onError, onEvent, onStatus=()=>{}) { this.onResult=onResult;this.onError=onError;this.onEvent=onEvent;this.onStatus=onStatus;this.active=false;this.pending=false;this.generation=0;this.lastText='';this.lastSeen=0;this.stream=null; }
   async start(video,deviceId='',mode='barcode') {
-    if(this.active||this.pending)return;const generation=++this.generation;this.pending=true;this.lastText='';this.lastSeen=0;
+    if(this.active||this.pending)return;const generation=++this.generation;this.pending=true;this.lastText='';this.lastSeen=0;this.candidate=null;this.engine=null;
     try {
       if(!globalThis.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw new Error('相機需要 HTTPS 網址與支援相機的瀏覽器。你仍可手動輸入。');
       this.mode=mode;
-      const reader=mode==='numbers'?null:createReader();
-      const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(deviceId?{deviceId:{exact:deviceId}}:{facingMode:{ideal:'environment'}}),width:{ideal:1920},height:{ideal:1080}}});
+      let reader=null,readerError=null;if(mode!=='numbers'){try{reader=createReader();}catch(e){readerError=e;}}
+      const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(deviceId?{deviceId:{exact:deviceId}}:{facingMode:{ideal:'environment'}}),width:{ideal:3840},height:{ideal:2160}}});
       if(generation!==this.generation){stream.getTracks().forEach(t=>t.stop());return;}
       this.stream=stream;this.video=video;video.muted=true;video.setAttribute('playsinline','');video.srcObject=stream;await video.play();
       if(generation!==this.generation)return;
@@ -49,6 +51,12 @@ export class CameraScanner {
         const digits=new RealtimeDigits(status=>{if(generation===this.generation)this.onStatus(status);});this.digits=digits;
         await digits.init();
         if(generation!==this.generation){digits.close();return;}
+      }else{
+        this.onStatus({message:'正在準備條碼辨識引擎…'});
+        const engine=await loadEngine().catch(()=>null);
+        if(generation!==this.generation)return;
+        if(!engine&&!reader)throw readerError||new Error('條碼辨識套件載入失敗，請重新整理或手動輸入。');
+        this.engine=engine;
       }
       const started=Date.now();let attempts=0;
       const tick=async()=>{
@@ -66,9 +74,14 @@ export class CameraScanner {
               else if(result?.number&&result.hits){this.onStatus({message:'讀到 '+result.number+' · 確認中 '+result.hits+'/3，請保持穩定。'});}
               else this.onStatus({message:'請只對準 17 碼數字，讓數字填滿框寬並保持清晰。'});
             }else{
-            const actual=attempts%4===0?{x:0,y:0,width:video.videoWidth,height:video.videoHeight}:r;
-            const text=reader.decodeFromCanvas(capture(video,actual)).getText(),now=Date.now();
-            if(text!==this.lastText||now-this.lastSeen>1800){this.lastText=text;this.onResult(text);}this.lastSeen=now;this.onStatus({message:'已讀到條碼，可繼續掃描下一張。'});
+            const actual=attempts%4===0?{x:0,y:0,width:video.videoWidth,height:video.videoHeight}:r,canvas=capture(video,actual,false,2600);
+            const text=this.engine?await decodeCanvas(canvas):reader.decodeFromCanvas(canvas).getText();
+            if(generation!==this.generation)return;
+            if(!text)throw Object.assign(new Error('NotFound'),{name:'NotFoundException'});
+            const now=Date.now();
+            // Code 39 has no mandatory check digit, so require the same value twice in a row before accepting it.
+            if(!this.confirmed(text,now)){this.lastSeen=now;this.onStatus({message:'讀到 '+text+' · 確認中 1/2，請保持穩定。'});}
+            else{if(text!==this.lastText||now-this.lastSeen>1800){this.lastText=text;this.onResult(text);}this.lastSeen=now;this.onStatus({message:'已讀到條碼，可繼續掃描下一張。'});}
             }
           }catch(e){
             if(generation!==this.generation)return;
@@ -82,6 +95,7 @@ export class CameraScanner {
     }catch(e){if(generation!==this.generation)return;this.stop(false);const messages={NotAllowedError:'未取得相機權限。請在瀏覽器設定允許相機，或使用手動輸入。',NotFoundError:'找不到相機，請使用手動輸入。',NotReadableError:'相機被其他程式使用，請關閉其他相機程式。',OverconstrainedError:'相機不支援此設定，請使用手動輸入。'};this.onEvent('camera_failed',{result:'failed',message:messages[e.name]||e.message});this.onError(messages[e.name]||e.message||'無法啟動相機，請使用手動輸入。');}
     finally{if(generation===this.generation)this.pending=false;}
   }
+  confirmed(text,now) {const c=this.candidate;if(c&&c.text===text&&now-c.at<=4000)return true;this.candidate={text,at:now};return false;}
   stop(record=true) {
     const running=this.active||this.pending;this.generation++;clearTimeout(this.timer);this.digits?.close();this.digits=null;this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;if(this.video){this.video.pause();this.video.srcObject=null;this.video=null;}this.active=false;this.pending=false;if(running&&record){this.onEvent('camera_stop');this.onStatus({message:'已停止辨識，點擊開始掃描可繼續。'});}
   }

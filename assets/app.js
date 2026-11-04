@@ -1,5 +1,5 @@
 import {DemoService,StorageError,STATE_KEY} from './service.js';
-import {CameraScanner,decodePhoto} from './scanner.js?v=3';
+import {CameraScanner,decodePhoto} from './scanner.js?v=4';
 const app=document.querySelector('#app'),nav=document.querySelector('#navigation'),toggle=document.querySelector('#menu-toggle');
 const icons={menu:'M4 6h16M4 12h16M4 18h16',back:'m15 18-6-6 6-6',scan:'M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M7 8v8M10 8v8M13 8v8M17 8v8',history:'M3 12a9 9 0 1 0 2.6-6.4M3 3v6h6M12 7v5l3 2',check:'m5 12 4 4L19 6',close:'m6 6 12 12M6 18 18 6',arrow:'M4 12h16m-6-6 6 6-6 6',camera:'M4 6h4l2-2h4l2 2h4v14H4zM15 13a3 3 0 1 1-6 0 3 3 0 0 1 6 0',log:'M7 3h10v18H7zM10 8h4M10 12h4M10 16h4',alert:'M12 3 2 21h20L12 3zM12 9v5M12 17v1',box:'M4 5h16v16H4zM4 10h16M10 5v5',plus:'M12 5v14M5 12h14'};
 const icon=(name,cls='')=>`<svg class="icon ${cls}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${icons[name]||icons.box}"/></svg>`;

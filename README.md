@@ -41,7 +41,9 @@
 
 [正式產品規格](SPEC.md) · [Demo 開發規格](DEMO_SPEC.md) · [驗證紀錄](TEST_REPORT.md)
 
-條碼引擎：`@zxing/browser` 0.1.5 UMD（內含 ZXing JS），來源為官方 npm 套件的 jsDelivr 發佈；browser 的 MIT 授權見 `assets/vendor/ZXING-LICENSE.txt`，內含 library 的 Apache-2.0 授權見 `assets/vendor/ZXING-LIBRARY-LICENSE.txt`。字體使用 Google Fonts 的 Noto Sans TC，網路不可用時回退至系統繁中字體。
+條碼引擎（2026-11 起主要使用）：zxing-wasm 3.1.6 reader（MIT；內含 zxing-cpp，Apache-2.0），程式與 WASM 隨網站放在 `assets/vendor/zxing-wasm`，授權見該目錄 `LICENSE.txt`。每個影格先做對比增強與銳化再解碼 Code 39 條碼，連續兩次讀到相同內容才加入。
+
+備援條碼引擎：`@zxing/browser` 0.1.5 UMD（內含 ZXing JS），來源為官方 npm 套件的 jsDelivr 發佈；browser 的 MIT 授權見 `assets/vendor/ZXING-LICENSE.txt`，內含 library 的 Apache-2.0 授權見 `assets/vendor/ZXING-LIBRARY-LICENSE.txt`。字體使用 Google Fonts 的 Noto Sans TC，網路不可用時回退至系統繁中字體。
 
 數字辨識：Tesseract.js 6.0.1、tesseract.js-core 6.0.0、@tesseract.js-data/eng 1.0.0 的 best_int 模型；程式、worker、WASM 與語言資料均在 assets/vendor/ocr 內提供，採 Apache-2.0 授權，見該目錄及 lang 子目錄 LICENSE。只下載模型，不上傳鏡頭內容。
 
